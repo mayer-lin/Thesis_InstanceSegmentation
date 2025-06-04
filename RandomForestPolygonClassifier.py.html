@@ -1,0 +1,98 @@
+<html>
+<head>
+<title>RandomForest4Flagging_submitted.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+RandomForest4Flagging_submitted.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#######################################################################################################</span>
+<span class="s0">#### This script utilizes Random Forest to flag whether a polygon is of an individual or cluster ####</span>
+<span class="s0">#######################################################################################################</span>
+
+<span class="s2">import </span><span class="s1">pandas </span><span class="s2">as </span><span class="s1">pd</span>
+<span class="s2">from </span><span class="s1">sklearn</span><span class="s3">.</span><span class="s1">ensemble </span><span class="s2">import </span><span class="s1">RandomForestClassifier</span>
+<span class="s2">from </span><span class="s1">sklearn</span><span class="s3">.</span><span class="s1">calibration </span><span class="s2">import </span><span class="s1">CalibratedClassifierCV</span>
+<span class="s2">from </span><span class="s1">sklearn</span><span class="s3">.</span><span class="s1">model_selection </span><span class="s2">import </span><span class="s1">train_test_split</span>
+<span class="s2">from </span><span class="s1">sklearn</span><span class="s3">.</span><span class="s1">metrics </span><span class="s2">import </span><span class="s1">accuracy_score</span><span class="s3">, </span><span class="s1">classification_report</span>
+
+<span class="s0"># Load dataset</span>
+<span class="s1">file_path </span><span class="s3">=  </span><span class="s4">&quot;data/input&quot; </span><span class="s0"># xlsx sheet. In QGIS, polygon geometries were calculated, and the according attribute table was exported.</span>
+<span class="s1">df </span><span class="s3">= </span><span class="s1">pd</span><span class="s3">.</span><span class="s1">read_excel</span><span class="s3">(</span><span class="s1">file_path</span><span class="s3">, </span><span class="s1">sheet_name</span><span class="s3">=</span><span class="s4">&quot;Sheet1&quot;</span><span class="s3">)</span>
+<span class="s1">df</span><span class="s3">.</span><span class="s1">columns </span><span class="s3">= </span><span class="s1">df</span><span class="s3">.</span><span class="s1">columns</span><span class="s3">.</span><span class="s1">str</span><span class="s3">.</span><span class="s1">strip</span><span class="s3">() </span><span class="s0"># Optional</span>
+
+<span class="s0"># Rename and clean. The original names were created by QGIS.</span>
+<span class="s1">df</span><span class="s3">.</span><span class="s1">rename</span><span class="s3">(</span><span class="s1">columns</span><span class="s3">={</span><span class="s4">&quot;Indv_or_cl&quot;</span><span class="s3">: </span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">}, </span><span class="s1">inplace</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s1">feature_label_mapping </span><span class="s3">= {</span>
+    <span class="s4">&quot;area&quot;</span><span class="s3">: </span><span class="s4">&quot;Area&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;perimeter&quot;</span><span class="s3">: </span><span class="s4">&quot;Perimeter&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;roundness&quot;</span><span class="s3">: </span><span class="s4">&quot;Roundness&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;perim2area&quot;</span><span class="s3">: </span><span class="s4">&quot;Perimeter-to-Area Ratio&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;convexhull_ratio&quot;</span><span class="s3">: </span><span class="s4">&quot;Convex Hull Ratio&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;dist2nearest_indiv&quot;</span><span class="s3">: </span><span class="s4">&quot;Distance to Nearest Individual&quot;</span>
+<span class="s3">}</span>
+<span class="s2">for </span><span class="s1">col </span><span class="s2">in </span><span class="s1">feature_label_mapping</span><span class="s3">.</span><span class="s1">keys</span><span class="s3">():</span>
+    <span class="s1">df</span><span class="s3">[</span><span class="s1">col</span><span class="s3">] = </span><span class="s1">df</span><span class="s3">[</span><span class="s1">col</span><span class="s3">].</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">str</span><span class="s3">).</span><span class="s1">str</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s4">','</span><span class="s3">, </span><span class="s4">'.'</span><span class="s3">).</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">float</span><span class="s3">)</span>
+<span class="s1">df</span><span class="s3">.</span><span class="s1">rename</span><span class="s3">(</span><span class="s1">columns</span><span class="s3">=</span><span class="s1">feature_label_mapping</span><span class="s3">, </span><span class="s1">inplace</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s1">features </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">feature_label_mapping</span><span class="s3">.</span><span class="s1">values</span><span class="s3">())</span>
+
+<span class="s0"># Adjust labeled data</span>
+<span class="s1">df_labeled </span><span class="s3">= </span><span class="s1">df</span><span class="s3">.</span><span class="s1">dropna</span><span class="s3">(</span><span class="s1">subset</span><span class="s3">=</span><span class="s1">features </span><span class="s3">+ [</span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">]).</span><span class="s1">copy</span><span class="s3">()</span>
+<span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">] = </span><span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">].</span><span class="s1">str</span><span class="s3">.</span><span class="s1">strip</span><span class="s3">().</span><span class="s1">map</span><span class="s3">({</span><span class="s4">&quot;Indv&quot;</span><span class="s3">: </span><span class="s5">0</span><span class="s3">, </span><span class="s4">&quot;Cl&quot;</span><span class="s3">: </span><span class="s5">1</span><span class="s3">}) </span><span class="s0"># Encodes Individual as 0 and Cluster as 1</span>
+<span class="s1">X_labeled </span><span class="s3">= </span><span class="s1">df_labeled</span><span class="s3">[</span><span class="s1">features</span><span class="s3">]</span>
+<span class="s1">y_labeled </span><span class="s3">= </span><span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">].</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">int</span><span class="s3">)</span>
+
+<span class="s0"># Split data</span>
+<span class="s1">X_train</span><span class="s3">, </span><span class="s1">X_test</span><span class="s3">, </span><span class="s1">y_train</span><span class="s3">, </span><span class="s1">y_test </span><span class="s3">= </span><span class="s1">train_test_split</span><span class="s3">(</span><span class="s1">X_labeled</span><span class="s3">, </span><span class="s1">y_labeled</span><span class="s3">, </span><span class="s1">test_size</span><span class="s3">=</span><span class="s5">0.1</span><span class="s3">, </span><span class="s1">random_state</span><span class="s3">=</span><span class="s5">42</span><span class="s3">) </span><span class="s0"># Update percentage for testing as needed. Maintain a fixed random state.</span>
+
+<span class="s0"># Train model with calibration</span>
+<span class="s1">rf_model </span><span class="s3">= </span><span class="s1">RandomForestClassifier</span><span class="s3">(</span><span class="s1">n_estimators</span><span class="s3">=</span><span class="s5">150</span><span class="s3">, </span><span class="s1">random_state</span><span class="s3">=</span><span class="s5">42</span><span class="s3">, </span><span class="s1">class_weight</span><span class="s3">={</span><span class="s5">0</span><span class="s3">: </span><span class="s5">1</span><span class="s3">, </span><span class="s5">1</span><span class="s3">: </span><span class="s5">1</span><span class="s3">}) </span><span class="s0"># Adjust as needed</span>
+<span class="s1">calibrated_rf </span><span class="s3">= </span><span class="s1">CalibratedClassifierCV</span><span class="s3">(</span><span class="s1">rf_model</span><span class="s3">, </span><span class="s1">method</span><span class="s3">=</span><span class="s4">'sigmoid'</span><span class="s3">, </span><span class="s1">cv</span><span class="s3">=</span><span class="s5">5</span><span class="s3">)</span>
+<span class="s1">calibrated_rf</span><span class="s3">.</span><span class="s1">fit</span><span class="s3">(</span><span class="s1">X_train</span><span class="s3">, </span><span class="s1">y_train</span><span class="s3">)</span>
+
+<span class="s0"># Thresholding logic. Essentially, if not 95% sure it's an individual then label as cluster.</span>
+<span class="s1">individual_prob </span><span class="s3">= </span><span class="s1">calibrated_rf</span><span class="s3">.</span><span class="s1">predict_proba</span><span class="s3">(</span><span class="s1">X_test</span><span class="s3">)[:, </span><span class="s5">0</span><span class="s3">]</span>
+<span class="s1">y_pred </span><span class="s3">= (</span><span class="s1">individual_prob </span><span class="s3">&lt; </span><span class="s5">0.95</span><span class="s3">).</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">int</span><span class="s3">)</span>
+
+<span class="s0"># Evaluate on training dataset</span>
+<span class="s1">accuracy </span><span class="s3">= </span><span class="s1">accuracy_score</span><span class="s3">(</span><span class="s1">y_test</span><span class="s3">, </span><span class="s1">y_pred</span><span class="s3">)</span>
+<span class="s1">print</span><span class="s3">(</span><span class="s4">&quot;Classification Report on Testing Data:</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s3">, </span><span class="s1">classification_report</span><span class="s3">(</span><span class="s1">y_test</span><span class="s3">, </span><span class="s1">y_pred</span><span class="s3">))</span>
+
+<span class="s0"># Predict on the labeled subset</span>
+<span class="s1">full_indiv_prob </span><span class="s3">= </span><span class="s1">calibrated_rf</span><span class="s3">.</span><span class="s1">predict_proba</span><span class="s3">(</span><span class="s1">df_labeled</span><span class="s3">[</span><span class="s1">features</span><span class="s3">])[:, </span><span class="s5">0</span><span class="s3">]</span>
+<span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;cluster_prob&quot;</span><span class="s3">] = </span><span class="s5">1 </span><span class="s3">- </span><span class="s1">full_indiv_prob</span>
+<span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;individual_prob&quot;</span><span class="s3">] = </span><span class="s1">full_indiv_prob</span>
+<span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;predicted_soft&quot;</span><span class="s3">] = (</span><span class="s1">full_indiv_prob </span><span class="s3">&lt; </span><span class="s5">0.95</span><span class="s3">).</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">int</span><span class="s3">)</span>
+<span class="s1">df_labeled</span><span class="s3">[</span><span class="s4">&quot;Ground Truth&quot;</span><span class="s3">] = </span><span class="s1">y_labeled</span><span class="s3">.</span><span class="s1">values</span>
+
+<span class="s0"># Predict on any unlabeled polygons</span>
+<span class="s1">df_unlabeled </span><span class="s3">= </span><span class="s1">df</span><span class="s3">[</span><span class="s1">df</span><span class="s3">[</span><span class="s4">&quot;category_encoded&quot;</span><span class="s3">].</span><span class="s1">isna</span><span class="s3">()].</span><span class="s1">copy</span><span class="s3">()</span>
+<span class="s2">if not </span><span class="s1">df_unlabeled</span><span class="s3">.</span><span class="s1">empty</span><span class="s3">:</span>
+    <span class="s1">df_unlabeled </span><span class="s3">= </span><span class="s1">df_unlabeled</span><span class="s3">.</span><span class="s1">dropna</span><span class="s3">(</span><span class="s1">subset</span><span class="s3">=</span><span class="s1">features</span><span class="s3">)</span>
+    <span class="s1">unlabeled_indiv_prob </span><span class="s3">= </span><span class="s1">calibrated_rf</span><span class="s3">.</span><span class="s1">predict_proba</span><span class="s3">(</span><span class="s1">df_unlabeled</span><span class="s3">[</span><span class="s1">features</span><span class="s3">])[:, </span><span class="s5">0</span><span class="s3">]</span>
+    <span class="s1">df_unlabeled</span><span class="s3">[</span><span class="s4">&quot;cluster_prob&quot;</span><span class="s3">] = </span><span class="s5">1 </span><span class="s3">- </span><span class="s1">unlabeled_indiv_prob</span>
+    <span class="s1">df_unlabeled</span><span class="s3">[</span><span class="s4">&quot;individual_prob&quot;</span><span class="s3">] = </span><span class="s1">unlabeled_indiv_prob</span>
+    <span class="s1">df_unlabeled</span><span class="s3">[</span><span class="s4">&quot;predicted_soft&quot;</span><span class="s3">] = (</span><span class="s1">unlabeled_indiv_prob </span><span class="s3">&lt; </span><span class="s5">0.95</span><span class="s3">).</span><span class="s1">astype</span><span class="s3">(</span><span class="s1">int</span><span class="s3">)</span>
+    <span class="s1">print</span><span class="s3">(</span><span class="s4">&quot;Predictions made for unlabeled polygons.&quot;</span><span class="s3">)</span>
+<span class="s2">else</span><span class="s3">:</span>
+    <span class="s1">print</span><span class="s3">(</span><span class="s4">&quot;No unlabeled polygons found.&quot;</span><span class="s3">)</span>
+
+<span class="s0"># Combine labeled and unlabeled back into one DataFrame</span>
+<span class="s1">df_combined </span><span class="s3">= </span><span class="s1">pd</span><span class="s3">.</span><span class="s1">concat</span><span class="s3">([</span><span class="s1">df_labeled</span><span class="s3">, </span><span class="s1">df_unlabeled</span><span class="s3">], </span><span class="s1">ignore_index</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+<span class="s0"># Save the combined results</span>
+<span class="s1">df_combined</span><span class="s3">.</span><span class="s1">to_excel</span><span class="s3">(</span><span class="s4">&quot;___/results.xlsx&quot;</span><span class="s3">, </span><span class="s1">index</span><span class="s3">=</span><span class="s2">False</span><span class="s3">) </span><span class="s0"># Add save location.</span>
+<span class="s1">print</span><span class="s3">(</span><span class="s4">&quot;Results saved to _____ &quot;</span><span class="s3">)</span></pre>
+</body>
+</html>
